@@ -1,0 +1,111 @@
+name: Build and Deploy FileServer to MonsterASP
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy-job:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SchoolManagement.FileServer
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Publish App
+        run: dotnet publish -c Release -o ../publish-out
+
+      - name: Stage app_offline.htm
+        working-directory: .
+        run: |
+          printf '%s\n' '<!DOCTYPE html><html><body><h1>OneSchool FileServer updating&hellip;</h1></body></html>' > ./publish-out/app_offline.htm
+
+      - name: Stop site before FTP (upload app_offline.htm)
+        working-directory: .
+        env:
+          FTP_HOST: ${{ secrets.PUBLISH_URL }}
+          FTP_USER: ${{ secrets.PUBLISH_USER }}
+          FTP_PASS: ${{ secrets.PUBLISH_PWD }}
+        run: |
+          python3 <<'PY'
+          import ftplib, os, ssl, time
+
+          host = os.environ["FTP_HOST"].replace("ftps://", "").replace("ftp://", "").split("/")[0]
+          user = os.environ["FTP_USER"]
+          pwd = os.environ["FTP_PASS"]
+
+          ctx = ssl.create_default_context()
+          ctx.check_hostname = False
+          ctx.verify_mode = ssl.CERT_NONE
+
+          ftp = ftplib.FTP_TLS(context=ctx)
+          ftp.connect(host, 21, timeout=90)
+          ftp.login(user, pwd)
+          ftp.prot_p()
+          try:
+              ftp.cwd("/wwwroot")
+          except Exception:
+              pass
+
+          with open("./publish-out/app_offline.htm", "rb") as f:
+              ftp.storbinary("STOR app_offline.htm", f)
+          ftp.quit()
+          print("app_offline.htm uploaded; waiting for IIS recycle")
+          time.sleep(12)
+          PY
+
+      - name: Upload to MonsterASP via FTP
+        working-directory: .
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.PUBLISH_URL }}
+          username: ${{ secrets.PUBLISH_USER }}
+          password: ${{ secrets.PUBLISH_PWD }}
+          protocol: ftps
+          local-dir: ./publish-out/
+          server-dir: /wwwroot/
+          dangerous-clean-slate: true
+
+      - name: Start site after FTP (remove app_offline.htm)
+        if: always()
+        working-directory: .
+        env:
+          FTP_HOST: ${{ secrets.PUBLISH_URL }}
+          FTP_USER: ${{ secrets.PUBLISH_USER }}
+          FTP_PASS: ${{ secrets.PUBLISH_PWD }}
+        run: |
+          python3 <<'PY'
+          import ftplib, os, ssl
+
+          host = os.environ["FTP_HOST"].replace("ftps://", "").replace("ftp://", "").split("/")[0]
+          user = os.environ["FTP_USER"]
+          pwd = os.environ["FTP_PASS"]
+
+          ctx = ssl.create_default_context()
+          ctx.check_hostname = False
+          ctx.verify_mode = ssl.CERT_NONE
+
+          ftp = ftplib.FTP_TLS(context=ctx)
+          ftp.connect(host, 21, timeout=90)
+          ftp.login(user, pwd)
+          ftp.prot_p()
+          try:
+              ftp.cwd("/wwwroot")
+          except Exception:
+              pass
+
+          try:
+              ftp.delete("app_offline.htm")
+              print("app_offline.htm removed — site online")
+          except Exception as e:
+              print(f"app_offline.htm delete warning: {e}")
+          ftp.quit()
+          PY

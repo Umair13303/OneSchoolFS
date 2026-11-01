@@ -71,11 +71,19 @@ builder.Services.Configure<FormOptions>(o =>
 });
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = long.MaxValue);
 
-// ── CORS (Angular dev server) ──────────────────────────────────────────────
+// ── CORS (dev + live Angular / Capacitor teacher app) ──────────────────────
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                  ?? new[]
+                  {
+                      "http://localhost:4200",
+                      "https://demooneschoolfe.runasp.net",
+                      "https://localhost",
+                      "capacitor://localhost",
+                  };
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", p => p
-        .WithOrigins("http://localhost:4200")
+        .WithOrigins(corsOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials());
