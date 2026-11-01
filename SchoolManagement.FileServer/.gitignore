@@ -1,0 +1,10 @@
+bin/
+obj/
+*.user
+.vs/
+
+# Uploaded content — keep folders, ignore files
+Storage/**/*
+!Storage/
+!Storage/**/
+!Storage/**/.gitkeep
