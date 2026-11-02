@@ -5,9 +5,6 @@ on:
 jobs:
   deploy-job:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: SchoolManagement.FileServer
 
     steps:
       - name: Checkout Code
@@ -21,15 +18,13 @@ jobs:
             10.0.x
 
       - name: Publish App
-        run: dotnet publish -c Release -o ../publish-out
+        run: dotnet publish SchoolManagement.FileServer/SchoolManagement.FileServer.csproj -c Release -o ./publish-out
 
       - name: Stage app_offline.htm
-        working-directory: .
         run: |
           printf '%s\n' '<!DOCTYPE html><html><body><h1>OneSchool FileServer updating&hellip;</h1></body></html>' > ./publish-out/app_offline.htm
 
       - name: Stop site before FTP (upload app_offline.htm)
-        working-directory: .
         env:
           FTP_HOST: ${{ secrets.PUBLISH_URL }}
           FTP_USER: ${{ secrets.PUBLISH_USER }}
@@ -63,7 +58,6 @@ jobs:
           PY
 
       - name: Upload to MonsterASP via FTP
-        working-directory: .
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.PUBLISH_URL }}
@@ -76,7 +70,6 @@ jobs:
 
       - name: Start site after FTP (remove app_offline.htm)
         if: always()
-        working-directory: .
         env:
           FTP_HOST: ${{ secrets.PUBLISH_URL }}
           FTP_USER: ${{ secrets.PUBLISH_USER }}
